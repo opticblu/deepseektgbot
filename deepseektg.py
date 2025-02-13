@@ -20,6 +20,9 @@ AUTHORIZED_USERS = [123456789, 987654321]  # Replace with your actual Telegram u
 # A set to track users who have initiated the conversation with /start
 started_users = set()
 
+# Telegram message maximum length
+MAX_MESSAGE_LENGTH = 4096
+
 # Set up logging for debugging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -77,7 +80,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     Handles messages from authorized users.
     If the user hasn't typed /start, they are prompted to do so.
     Otherwise, the bot streams the LLM response and updates a single Telegram message
-    at 4-second intervals to avoid flooding.
+    at 4-second intervals to avoid flooding, and ensures the message never exceeds
+    Telegram's maximum allowed length.
     """
     user_id = update.message.from_user.id
     user_text = update.message.text
@@ -105,6 +109,9 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             # Only update the Telegram message every 4 seconds
             if now - last_update_time >= 4:
                 cleaned_text = re.sub(r"<.*?>", "", accumulated_text).strip()
+                # Ensure message does not exceed Telegram's maximum allowed length
+                if len(cleaned_text) > MAX_MESSAGE_LENGTH:
+                    cleaned_text = cleaned_text[-MAX_MESSAGE_LENGTH:]
                 try:
                     await processing_message.edit_text(cleaned_text)
                 except Exception as e:
@@ -113,6 +120,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
         # Final update after streaming is complete
         cleaned_text = re.sub(r"<.*?>", "", accumulated_text).strip()
+        if len(cleaned_text) > MAX_MESSAGE_LENGTH:
+            cleaned_text = cleaned_text[-MAX_MESSAGE_LENGTH:]
         await processing_message.edit_text(cleaned_text)
     except Exception as e:
         logging.exception("Error during streaming: %s", e)
